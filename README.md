@@ -39,11 +39,21 @@ export GATEWAY_KEY="paste_seeded_key_here"
 
 curl http://localhost:8000/health
 
-curl http://localhost:8000/v1/chat/completions   -H "Authorization: Bearer $GATEWAY_KEY"   -H "Content-Type: application/json"   -d '{
-    "model": "claude-quality",
-    "messages": [{"role":"user","content":"Say hi in one sentence."}],
-    "temperature": 0.2
-  }'
+curl --location 'http://localhost:8000/v1/chat/completions' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: ••••••' \
+--data '{
+  "model": "claude-fast",
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "You are Cursor AI..." }
+      ]
+    }
+  ]
+}'
 ```
 
 ## 2) Configure IDEs
