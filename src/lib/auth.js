@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "./prisma.js";
 
-function hashKey(plaintext) {
+export function hashKey(plaintext) {
   const salt = process.env.GATEWAY_KEY_SALT || "";
   if (!salt) throw new Error("GATEWAY_KEY_SALT is required");
   return crypto.createHash("sha256").update(`${salt}:${plaintext}`).digest("hex");
@@ -19,17 +19,20 @@ export async function requireApiKey(req) {
   }
 
   const keyHash = hashKey(plaintext);
-  const apiKey = await prisma.apiKey.findUnique({ where: { keyHash } });
-
-  if (!apiKey || !apiKey.isActive) {
-    return { ok: false, status: 403, error: "Invalid or disabled API key" };
+  // Try ApiKey table first
+  let apiKey = await prisma.apiKey.findUnique({ where: { keyHash } });
+  if (apiKey && apiKey.isActive) {
+    // update last used (best-effort)
+    prisma.apiKey.update({
+      where: { id: apiKey.id },
+      data: { lastUsedAt: new Date() }
+    }).catch(() => {});
+    return { ok: true, apiKey, type: 'gateway' };
   }
-
-  // update last used (best-effort)
-  prisma.apiKey.update({
-    where: { id: apiKey.id },
-    data: { lastUsedAt: new Date() }
-  }).catch(() => {});
-
-  return { ok: true, apiKey };
+  // Try UserApiKey table
+  let userApiKey = await prisma.userApiKey.findUnique({ where: { apiKeyHash: keyHash } });
+  if (userApiKey && userApiKey.isActive) {
+    return { ok: true, apiKey: userApiKey, type: 'user' };
+  }
+  return { ok: false, status: 403, error: "Invalid or disabled API key" };
 }

@@ -1,5 +1,29 @@
+model UserRequest {
+  id             String   @id @default(cuid())
+  userApiKeyId   String
+  userApiKey     UserApiKey @relation(fields: [userApiKeyId], references: [id])
+  endpoint       String
+  status         String
+  costUsd        Decimal  @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([userApiKeyId, createdAt])
+}
 generator client {
   provider = "prisma-client-js"
+}
+
+model UserApiKey {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  firstname String
+  lastname  String
+  apiKeyHash String   @unique
+  limitUsd  Decimal  @default(10)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  requests  UserRequest[]
 }
 
 datasource db {

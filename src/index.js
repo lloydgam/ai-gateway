@@ -3,8 +3,10 @@ import helmet from "helmet";
 import morgan from "morgan";
 import "dotenv/config";
 
+
 import { chatCompletionsHandler } from "./routes/chatCompletions.js";
 import { healthHandler } from "./routes/health.js";
+import userApiKeysRouter from "./routes/userApiKeys.js";
 
 const app = express();
 
@@ -24,8 +26,12 @@ app.get("/", (req, res) => {
   });
 });
 
+
 app.get("/health", healthHandler);
 app.post("/v1/chat/completions", chatCompletionsHandler);
+
+// User API Key management endpoints
+app.use("/v1/user-api-keys", userApiKeysRouter);
 
 const port = parseInt(process.env.PORT || "8000", 10);
 app.listen(port, () => {

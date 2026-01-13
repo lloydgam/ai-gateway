@@ -230,6 +230,7 @@ export async function chatCompletionsHandler(req, res) {
 
     const costUsd = estimateCostUsd(out.providerModel, promptTokens, completionTokens);
 
+
     // Log usage (best-effort)
     logRequest({
       apiKeyId: apiKey.id,
@@ -241,6 +242,21 @@ export async function chatCompletionsHandler(req, res) {
       totalTokens,
       costUsd
     }).catch(() => {});
+
+    // If this is a user API key, log to UserRequest as well
+    if (auth.type === 'user') {
+      // Import PrismaClient here to avoid circular import
+      const { PrismaClient } = await import('@prisma/client');
+      const prisma = new PrismaClient();
+      prisma.userRequest.create({
+        data: {
+          userApiKeyId: apiKey.id,
+          endpoint: '/v1/chat/completions',
+          status: out.text ? 'success' : 'error',
+          costUsd: costUsd || 0
+        }
+      }).catch(() => {});
+    }
 
     // OpenAI-compatible response shape
     return res.json({
