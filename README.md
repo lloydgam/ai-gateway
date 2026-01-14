@@ -70,6 +70,10 @@ The gateway provides endpoints to create, delete, and regenerate user-specific A
   - Optional body: `{ "reason": "string describing why the key is regenerated" }`
   - Response: `{ id, email, firstname, lastname, apiKey, createdAt, updatedAt }` (new apiKey is plaintext, shown only once)
 
+- `POST /v1/user-api-keys/:id/increase-token-limit` — Increase the token limit for a user API key
+  - Body: `{ "increment": <number> }`
+  - Response: `{ id, newLimit }`
+
 - `GET /v1/user-api-keys` — List all user API keys (for admin/debug; does not return plaintext keys)
 
 - `GET /v1/user-api-keys/usage` — List all user API keys with usage and limits

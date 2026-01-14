@@ -203,5 +203,39 @@ router.get('/:id/usage-history', async (req, res) => {
   res.json({ userId: id, history });
 });
 
+// Increase token limit for a user API key
+router.post('/:id/increase-token-limit', async (req, res) => {
+  const auth = await requireApiKey(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
+  }
+  const { id } = req.params;
+  const { increment } = req.body;
+  if (!increment || typeof increment !== 'number' || increment <= 0) {
+    return res.status(400).json({ error: 'Missing or invalid increment value' });
+  }
+  try {
+    const user = await prisma.userApiKey.findUnique({ where: { id } });
+    if (!user) return res.status(404).json({ error: 'User API key not found' });
+    const newLimit = Number(user.limitToken || 0) + increment;
+    const updated = await prisma.userApiKey.update({
+      where: { id },
+      data: { limitToken: newLimit }
+    });
+    // Log the increase in UserRequest
+    await prisma.userRequest.create({
+      data: {
+        userApiKeyId: id,
+        endpoint: `/v1/user-api-keys/${id}/increase-token-limit`,
+        status: `token limit increased by ${increment}`,
+        costUsd: 0
+      }
+    });
+    res.json({ id: updated.id, newLimit: updated.limitToken });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 export default router;
