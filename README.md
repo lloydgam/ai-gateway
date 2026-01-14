@@ -32,6 +32,30 @@ docker compose up --build
 
 The gateway provides endpoints to create, delete, and regenerate user-specific API keys. User API keys are hashed before storage (never stored in plaintext) and the plaintext key is only returned once on creation or regeneration. Store it securely!
 
+### Usage Limits
+
+- **Token-based monthly limits**: Each user API key can have a `limitToken` (monthly token limit). If not set, a default can be configured via `DEFAULT_MONTHLY_TOKEN_LIMIT` env var. When the limit is reached, requests are rejected with a clear error message.
+- **Cost-based monthly limits**: (For gateway keys) Each API key can have a `monthlyLimitUsd` (default via `DEFAULT_MONTHLY_LIMIT_USD`).
+- Usage is aggregated per month and per key.
+
+### Error Handling
+
+- If a user or gateway key exceeds its monthly limit, the API returns a 429 error with a structured error message, including the current usage and the limit.
+- Example error response:
+  ```json
+  {
+    "error": "Monthly token limit exceeded (100000 / 100000 tokens)",
+    "tokensUsed": 100000,
+    "tokenLimit": 100000
+  }
+  ```
+
+### Schema Notes
+
+- The `Request` model no longer has a relation to `ApiKey` (just a string `apiKeyId`).
+- The `UserRequest` model can be extended to include a `tokensUsed` field if you want to track per-request token usage for user keys.
+
+
 
 ### Endpoints
 
@@ -48,16 +72,22 @@ The gateway provides endpoints to create, delete, and regenerate user-specific A
 
 - `GET /v1/user-api-keys` — List all user API keys (for admin/debug; does not return plaintext keys)
 
-- `GET /v1/user-api-keys/usage` — List all user API keys with usage and limits (placeholders for now)
-  - Response: `[ { id, email, firstname, lastname, createdAt, updatedAt, usage, limit } ]`
+- `GET /v1/user-api-keys/usage` — List all user API keys with usage and limits
+  - Response: `[ { id, email, firstname, lastname, createdAt, updatedAt, totalTokens, requestCount, totalCostUsd, limitUsd, overLimit } ]`
 
-- `GET /v1/user-api-keys/:id/usage-history` — Get usage history for a specific user (currently returns an empty array)
-  - Response: `{ userId, history: [] }`
+- `GET /v1/user-api-keys/:id/usage-history` — Get usage history for a specific user
+  - Response: `{ userId, history: [ ... ] }`
 
 
 **Security Note:**
 - The plaintext API key is only returned once. Store it securely after creation/regeneration.
 - User API keys are hashed before storage and cannot be recovered if lost.
+
+## Environment Variables
+
+- `DEFAULT_MONTHLY_LIMIT_USD` — Default monthly cost limit for gateway keys (USD)
+- `DEFAULT_MONTHLY_TOKEN_LIMIT` — Default monthly token limit for user keys
+- `ENFORCE_BUDGETS` — Set to `true` to enable budget enforcement (default: true)
 
 
 In a second terminal:
@@ -140,11 +170,11 @@ docker compose up -d --build
 
 
 ## 4) What’s included (MVP)
-- OpenAI-compatible `chat/completions` (non-streaming)
+- OpenAI-compatible `chat/completions` (streaming and non-streaming)
 - API key auth (hashed tokens in DB)
 - **User API key management endpoints (hashed storage)**
 - Usage logging per request
-- Simple monthly budget enforcement per key (optional, defaults to enabled with a generous limit)
+- Simple monthly budget and/or token enforcement per key (configurable)
 
 ## 5) Next upgrades (common)
 - Streaming (SSE)

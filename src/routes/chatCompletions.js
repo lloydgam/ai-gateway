@@ -15,11 +15,6 @@ function makeId() {
   return "chatcmpl_" + crypto.randomBytes(12).toString("hex");
 }
 
-// Helper to pause for a given number of milliseconds
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 export async function chatCompletionsHandler(req, res) {
 
   // Only log req.body.messages to avoid circular structure error
@@ -110,14 +105,47 @@ export async function chatCompletionsHandler(req, res) {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      // Pause for 1 second before provider call
-      await sleep(1000);
+
+      // check if UserApikey is not active
+      if (!apiKey.isActive) {
+        return res.status(403).json({ error: { message: "API key is not active", type: "auth_error" } });
+      }
+
+      await enforceMonthlyBudgetOrThrow(apiKey);
+      
       const out = await callAnthropic({
         requestedModel: body.model,
         messages: sanitizedMessages,
         temperature: body.temperature,
         max_tokens: body.max_tokens
       });
+
+      const promptTokens = out.usage?.prompt_tokens || out.usage?.input_tokens || 0;
+      const completionTokens = out.usage?.completion_tokens || out.usage?.output_tokens || 0;
+      const totalTokens = out.usage?.total_tokens || (promptTokens + completionTokens);
+
+      console.log('DEBUG: Streaming response from out:', JSON.stringify(out, null, 2));
+      console.log('DEBUG: Streaming response from apiKey:', JSON.stringify(apiKey, null, 2));
+      // Log usage (best-effort)
+      const logPayload = {
+        apiKeyId: apiKey.id,
+        requestedModel: body.model,
+        provider: out.provider,
+        providerModel: out.providerModel,
+        promptTokens,
+        completionTokens,
+        totalTokens,
+        costUsd: estimateCostUsd(out.providerModel, promptTokens, completionTokens) 
+      };
+      console.log('DEBUG: logRequest payload (stream):', logPayload);
+      logRequest(logPayload)
+        .then(result => {
+          console.log('DEBUG: logRequest created (stream):', result ? 'success' : 'failed', result);
+        })
+        .catch(err => {
+          console.log('DEBUG: logRequest error (stream):', err);
+        });
+
       // Simulate streaming by sending the full text as a single chunk, then a finish chunk, then [DONE]
       const streamId = makeId();
       const now = nowUnix();
@@ -163,8 +191,6 @@ export async function chatCompletionsHandler(req, res) {
 
     // Debug logging
     // console.log('DEBUG: body.messages:', JSON.stringify(body.messages, null, 2));
-
-    await enforceMonthlyBudgetOrThrow(apiKey);
 
     function flattenMessages(messages) {
       return messages.reduce((acc, m) => {
@@ -222,14 +248,6 @@ export async function chatCompletionsHandler(req, res) {
       console.log('DEBUG: error fallback response:', JSON.stringify(errorFallback, null, 2));
       return res.status(200).json(errorFallback);
     }
-
-    // Map provider response to OpenAI-compatible response
-    const promptTokens = out.usage?.prompt_tokens || out.usage?.input_tokens || 0;
-    const completionTokens = out.usage?.completion_tokens || out.usage?.output_tokens || 0;
-    const totalTokens = out.usage?.total_tokens || (promptTokens + completionTokens);
-
-    const costUsd = estimateCostUsd(out.providerModel, promptTokens, completionTokens);
-
 
     // Log usage (best-effort)
     logRequest({

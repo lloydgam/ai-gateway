@@ -20,15 +20,15 @@ router.post('/', async (req, res) => {
   if (!auth.ok) {
     return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
   }
-  const { email, firstname, lastname } = req.body;
-  if (!email || !firstname || !lastname) {
+  const { email, firstname, lastname, limitToken } = req.body;
+  if (!email || !firstname || !lastname || !limitToken) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   const apiKey = generateApiKey();
   const apiKeyHash = hashKey(apiKey);
   try {
     const userApiKey = await prisma.userApiKey.create({
-      data: { email, firstname, lastname, apiKeyHash },
+      data: { email, firstname, lastname, apiKeyHash, limitToken },
     });
     // Log creation in UserRequest
     await prisma.userRequest.create({
@@ -45,6 +45,7 @@ router.post('/', async (req, res) => {
       firstname: userApiKey.firstname,
       lastname: userApiKey.lastname,
       apiKey, // Return plaintext key once
+      limitToken: userApiKey.limitToken,
       createdAt: userApiKey.createdAt,
       updatedAt: userApiKey.updatedAt,
     });
@@ -114,6 +115,7 @@ router.post('/:id/regenerate', async (req, res) => {
       newApiKey,
       createdAt: updated.createdAt,
       updatedAt: updated.updatedAt,
+      limitTokens: updated.limitTokens,
     });
   } catch (err) {
     res.status(404).json({ error: 'API key not found' });
@@ -137,7 +139,8 @@ router.get('/', async (req, res) => {
     apiKeyHash: user.apiKeyHash,
     limitUsd: user.limitUsd,
     createdAt: user.createdAt,
-    updatedAt: user.updatedAt
+    updatedAt: user.updatedAt,
+    limitToken: user.limitToken,
   }));
   res.json(result);
 });
@@ -150,12 +153,19 @@ router.get('/usage', async (req, res) => {
   }
   // Get all users
   const users = await prisma.userApiKey.findMany();
-  // For each user, aggregate request count and total cost
+  // For each user, aggregate request count and total cost from UserRequest and Request
   const result = await Promise.all(users.map(async user => {
-    const agg = await prisma.userRequest.aggregate({
+    // Aggregate from UserRequest (per-user custom events)
+    const userAgg = await prisma.userRequest.aggregate({
       _count: { id: true },
       _sum: { costUsd: true },
       where: { userApiKeyId: user.id }
+    });
+    // Aggregate from Request (API usage, if apiKeyId matches user.id)
+    const reqAgg = await prisma.request.aggregate({
+      _count: { id: true },
+      _sum: { totalTokens: true, costUsd: true },
+      where: { apiKeyId: user.id }
     });
     return {
       id: user.id,
@@ -165,10 +175,14 @@ router.get('/usage', async (req, res) => {
       lastname: user.lastname,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      requestCount: agg._count.id,
-      totalCostUsd: agg._sum.costUsd || 0,
+      // Sum tokens and cost from Request table
+      totalTokens: reqAgg._sum.totalTokens || 0,
+      requestCount: reqAgg._count.id,
+      totalCostUsd: reqAgg._sum.costUsd || 0,
+      // Optionally, you can also include userAgg if you want to show custom events
       limitUsd: user.limitUsd,
-      overLimit: agg._sum.costUsd && user.limitUsd && agg._sum.costUsd > user.limitUsd ? true : false
+      limitToken: user.limitToken,
+      overLimit: reqAgg._sum.costUsd && user.limitUsd && reqAgg._sum.costUsd > user.limitUsd ? true : false
     };
   }));
   res.json(result);

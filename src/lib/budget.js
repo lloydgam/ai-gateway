@@ -10,12 +10,12 @@ export async function enforceMonthlyBudgetOrThrow(apiKey) {
   const enforce = (process.env.ENFORCE_BUDGETS || "true").toLowerCase() === "true";
   if (!enforce) return;
 
-  // Determine limit: per-key override else default
-  const defaultLimit = Number(process.env.DEFAULT_MONTHLY_LIMIT_USD || "200");
-  const keyLimit = Number(apiKey.monthlyLimitUsd);
-  const limit = keyLimit > 0 ? keyLimit : defaultLimit;
+  // Determine token limit: per-key override else default
+  const defaultTokenLimit = Number(process.env.DEFAULT_MONTHLY_TOKEN_LIMIT || "0"); // 0 = unlimited
+  const keyTokenLimit = Number(apiKey.limitToken);
+  const tokenLimit = keyTokenLimit > 0 ? keyTokenLimit : defaultTokenLimit;
 
-  // Sum costs for this month for this key
+  // Sum tokens for this month for this key
   const now = new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0));
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0));
@@ -25,14 +25,15 @@ export async function enforceMonthlyBudgetOrThrow(apiKey) {
       apiKeyId: apiKey.id,
       createdAt: { gte: start, lt: end }
     },
-    _sum: { costUsd: true }
+    _sum: { totalTokens: true }
   });
 
-  const spent = Number(agg._sum.costUsd || 0);
+  const tokensUsed = Number(agg._sum.totalTokens || 0);
 
-  if (spent >= limit) {
-    const err = new Error(`Monthly budget exceeded (${spent.toFixed(2)} / ${limit.toFixed(2)} USD)`);
+  if (tokenLimit > 0 && tokensUsed >= tokenLimit) {
+    const err = new Error(`Monthly token limit exceeded (${tokensUsed} / ${tokenLimit} tokens)`);
     err.statusCode = 429;
+    console.error('Token limit enforcement error:', err);
     throw err;
   }
 }

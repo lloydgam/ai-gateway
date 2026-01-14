@@ -20,6 +20,7 @@ model UserApiKey {
   lastname  String
   apiKeyHash String   @unique
   limitUsd  Decimal  @default(10)
+  limitToken  Int  @default(10)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -40,13 +41,13 @@ model ApiKey {
   createdAt       DateTime @default(now())
   lastUsedAt      DateTime?
 
-  requests        Request[]
+  // REMOVE THIS LINE:
+  // requests        Request[]
 }
 
 model Request {
   id               String   @id @default(cuid())
   apiKeyId         String
-  apiKey           ApiKey   @relation(fields: [apiKeyId], references: [id])
 
   requestedModel   String
   provider         String
