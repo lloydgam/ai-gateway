@@ -26,11 +26,21 @@ cp env.example .env
 
 docker compose up --build
 ```
-## User API Key Management
 
+## User API Key Management & ClaudeCode Key Mapping
 
+This gateway supports integration with ClaudeCode, which requires a mapping between the API key assigned by ClaudeCode (selected during your first login to ClaudeCode) and the gateway's own API key. This is necessary because ClaudeCode will always use the same assigned API key token for authentication, and it must be mapped to a valid gateway API key for requests to succeed.
 
-The gateway provides endpoints to create, delete, and regenerate user-specific API keys. User API keys are hashed before storage (never stored in plaintext) and the plaintext key is only returned once on creation or regeneration. Store it securely!
+**How it works:**
+- When a new user is created, you must provide the free version ClaudeCode account's API key (the one shown in ClaudeCode settings). This will be stored as `claudecodeUserKey` and mapped to a generated `aigatewayUserKey`.
+- When authenticating, if a request comes in with a `claudecodeUserKey`, the gateway will automatically map it to the correct `aigatewayUserKey` for downstream processing.
+- On key regeneration, both keys are updated and the mapping is maintained.
+
+**This means:**
+- Every new user must provide their ClaudeCode API key token at creation time.
+- The mapping is stored in the database and used for all future requests from that user.
+
+**Security Note:** The plaintext API key is only returned once. Store it securely after creation/regeneration. User API keys are hashed before storage and cannot be recovered if lost.
 
 ### Usage Limits
 
@@ -59,16 +69,17 @@ The gateway provides endpoints to create, delete, and regenerate user-specific A
 
 ### Endpoints
 
+
 - `POST /v1/user-api-keys` — Create a new user API key
-  - Body: `{ "email": "...", "firstname": "...", "lastname": "..." }`
-  - Response: `{ id, email, firstname, lastname, apiKey, createdAt, updatedAt }` (apiKey is plaintext, shown only once)
+  - Body: `{ "email": "...", "firstname": "...", "lastname": "...", "claudecodeUserKey": "<claudecode_api_key>" }`
+  - Response: `{ id, email, firstname, lastname, apiKey, claudecodeUserKey, aigatewayUserKey, createdAt, updatedAt }` (apiKey and both mapping keys are plaintext, shown only once)
 
 - `DELETE /v1/user-api-keys/:id` — Delete a user API key
   - Response: `{ success: true }`
 
 - `POST /v1/user-api-keys/:id/regenerate` — Regenerate a user's API key
   - Optional body: `{ "reason": "string describing why the key is regenerated" }`
-  - Response: `{ id, email, firstname, lastname, apiKey, createdAt, updatedAt }` (new apiKey is plaintext, shown only once)
+  - Response: `{ id, email, firstname, lastname, newApiKey, claudecodeUserKey, aigatewayUserKey, createdAt, updatedAt }` (new keys are plaintext, shown only once)
 
 - `POST /v1/user-api-keys/:id/increase-token-limit` — Increase the token limit for a user API key
   - Body: `{ "increment": <number> }`

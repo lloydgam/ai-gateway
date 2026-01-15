@@ -20,15 +20,16 @@ router.post('/', async (req, res) => {
   if (!auth.ok) {
     return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
   }
-  const { email, firstname, lastname, limitToken } = req.body;
-  if (!email || !firstname || !lastname || !limitToken) {
+  const { email, firstname, lastname, limitToken, claudecodeUserKey, aigatewayUserKey } = req.body;
+
+  if (!email || !firstname || !lastname || !limitToken || !claudecodeUserKey || !aigatewayUserKey) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   const apiKey = generateApiKey();
   const apiKeyHash = hashKey(apiKey);
   try {
     const userApiKey = await prisma.userApiKey.create({
-      data: { email, firstname, lastname, apiKeyHash, limitToken },
+      data: { email, firstname, lastname, apiKeyHash, limitToken, claudecodeUserKey, aigatewayUserKey: apiKey  },
     });
     // Log creation in UserRequest
     await prisma.userRequest.create({
@@ -48,6 +49,8 @@ router.post('/', async (req, res) => {
       limitToken: userApiKey.limitToken,
       createdAt: userApiKey.createdAt,
       updatedAt: userApiKey.updatedAt,
+      claudecodeUserKey: userApiKey.claudecodeUserKey,
+      aigatewayUserKey: userApiKey.aigatewayUserKey,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -94,7 +97,7 @@ router.post('/:id/regenerate', async (req, res) => {
   try {
     const updated = await prisma.userApiKey.update({
       where: { id },
-      data: { apiKeyHash: newApiKeyHash, isActive: true },
+      data: { apiKeyHash: newApiKeyHash, isActive: true, aigatewayUserKey: newApiKey },
     });
     // Log regeneration in UserRequest, including reason if provided
     await prisma.userRequest.create({

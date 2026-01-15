@@ -10,7 +10,6 @@ export function hashKey(plaintext) {
 }
 
 export async function requireApiKey(req) {
-  console.log('DEBUG: Authorization header:', req.headers);
   let plaintext;
   const auth = req.headers["authorization"] || "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
@@ -19,17 +18,17 @@ export async function requireApiKey(req) {
     plaintext = m[1].trim();
   } else if (req.headers["x-api-key"]) {
     plaintext = req.headers["x-api-key"].toString().trim();
-
-    console.log('DEBUG: x-api-key header found', plaintext);
+    console.log('DEBUG: x-api-key header found', plaintext); //this is coming from claudecode when you use own api key to use claudecode
+    // Try to find by claudecodeUserKey
+    const userByMapper = await prisma.userApiKey.findUnique({ where: { claudecodeUserKey: plaintext } });    
+    // Use aigatewayUserKey as the plaintext for hashing and downstream
+    plaintext = userByMapper.aigatewayUserKey;
+    console.log('DEBUG: new plaintext from userApiKey', plaintext);
   }
   if (!plaintext) {
     return { ok: false, status: 401, error: "Missing Bearer token or x-api-key" };
   }
 
-  // // static for now will need a db lookup later 
-  // plaintext = "xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
-  // console.log('DEBUG: ========== API key: ' + plaintext);
-  
   const keyHash = hashKey(plaintext);
   // Try ApiKey table first
   let apiKey = await prisma.apiKey.findUnique({ where: { keyHash } });
