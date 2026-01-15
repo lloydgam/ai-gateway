@@ -240,5 +240,34 @@ router.post('/:id/increase-token-limit', async (req, res) => {
   }
 });
 
-
+// Update ClaudeCode API key for a user by userApiKey id
+router.post('/:id/update-claudecode-key', async (req, res) => {
+  const auth = await requireApiKey(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
+  }
+  const { id } = req.params;
+  const { claudecodeUserKey } = req.body;
+  if (!claudecodeUserKey) {
+    return res.status(400).json({ error: 'Missing claudecodeUserKey' });
+  }
+  try {
+    const updated = await prisma.userApiKey.update({
+      where: { id },
+      data: { claudecodeUserKey },
+    });
+    // Log the update in UserRequest
+    await prisma.userRequest.create({
+      data: {
+        userApiKeyId: id,
+        endpoint: `/v1/user-api-keys/${id}/update-claudecode-key`,
+        status: `claudecodeUserKey updated`,
+        costUsd: 0
+      }
+    });
+    res.json({ id: updated.id, claudecodeUserKey: updated.claudecodeUserKey });
+  } catch (err) {
+    res.status(404).json({ error: 'User API key not found' });
+  }
+});
 export default router;

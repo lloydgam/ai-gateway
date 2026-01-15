@@ -93,7 +93,10 @@ This gateway supports integration with ClaudeCode, which requires a mapping betw
 - `GET /v1/user-api-keys/:id/usage-history` — Get usage history for a specific user
   - Response: `{ userId, history: [ ... ] }`
 
-
+- `POST /v1/user-api-keys/:id/update-claudecode-key` — Update the ClaudeCode API key for a user
+  - Body: `{ "claudecodeUserKey": "<new_claudecode_api_key>" }`
+  - Response: `{ id, claudecodeUserKey }`
+  
 **Security Note:**
 - The plaintext API key is only returned once. Store it securely after creation/regeneration.
 - User API keys are hashed before storage and cannot be recovered if lost.
