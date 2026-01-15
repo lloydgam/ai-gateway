@@ -17,7 +17,10 @@ router.post('/messages', async (req, res) => {
     }
     const apiKey = auth.apiKey;
 
-    
+    // check if UserApikey is not active
+    if (!apiKey.isActive) {
+      return res.status(403).json({ error: { message: "API key is not active", type: "auth_error" } });
+    }
 
     // Enforce budget/token limits
     const budgetResult = await enforceMonthlyBudgetOrThrow(apiKey);
