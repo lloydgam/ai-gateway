@@ -1,5 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "./prisma.js";
+import { json } from "stream/consumers";
+import { pl } from "zod/v4/locales";
 
 export function hashKey(plaintext) {
   const salt = process.env.GATEWAY_KEY_SALT || "";
@@ -8,16 +10,26 @@ export function hashKey(plaintext) {
 }
 
 export async function requireApiKey(req) {
+  console.log('DEBUG: Authorization header:', req.headers);
+  let plaintext;
   const auth = req.headers["authorization"] || "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
-  if (!m) {
-    return { ok: false, status: 401, error: "Missing Bearer token" };
+  
+  if (m) {
+    plaintext = m[1].trim();
+  } else if (req.headers["x-api-key"]) {
+    plaintext = req.headers["x-api-key"].toString().trim();
+
+    console.log('DEBUG: x-api-key header found', plaintext);
   }
-  const plaintext = m[1].trim();
   if (!plaintext) {
-    return { ok: false, status: 401, error: "Missing Bearer token" };
+    return { ok: false, status: 401, error: "Missing Bearer token or x-api-key" };
   }
 
+  // // static for now will need a db lookup later 
+  // plaintext = "xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
+  // console.log('DEBUG: ========== API key: ' + plaintext);
+  
   const keyHash = hashKey(plaintext);
   // Try ApiKey table first
   let apiKey = await prisma.apiKey.findUnique({ where: { keyHash } });

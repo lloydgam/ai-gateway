@@ -186,3 +186,35 @@ docker compose up -d --build
 - Team attribution + RBAC
 - Prompt redaction / DLP
 - Multi-provider routing (OpenAI, local models)
+
+## Claude v1/messages Endpoint
+
+- `POST /v1/messages` — Claude-compatible completions endpoint
+  - Body:
+    ```json
+    {
+      "model": "claude-3-opus-20240229",
+      "messages": [
+        { "role": "user", "content": "Hello, Claude!" }
+      ],
+      "max_tokens": 1024,
+      "temperature": 0.7
+    }
+    ```
+  - Response:
+    ```json
+    {
+      "id": "msg_...",
+      "type": "message",
+      "role": "assistant",
+      "content": "Hello! How can I help you today?",
+      "model": "claude-3-opus-20240229",
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 20
+      }
+    }
+    ```
+  - Auth: Requires a valid API key in the `Authorization` header.
+  - This endpoint is compatible with Claude's v1/messages API format for easy integration with Claude-compatible clients.

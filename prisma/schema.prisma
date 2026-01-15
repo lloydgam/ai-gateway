@@ -19,6 +19,8 @@ model UserApiKey {
   firstname String
   lastname  String
   apiKeyHash String   @unique
+  claudecodeUserKey String @unique
+  aigatewayUserKey String @unique
   limitUsd  Decimal  @default(10)
   limitToken  Int  @default(10)
   isActive  Boolean  @default(true)

@@ -4,9 +4,11 @@ import morgan from "morgan";
 import "dotenv/config";
 
 
+
 import { chatCompletionsHandler } from "./routes/chatCompletions.js";
 import { healthHandler } from "./routes/health.js";
 import userApiKeysRouter from "./routes/userApiKeys.js";
+import claudeCompletionsRouter from "./routes/claudeCompletions.js";
 
 const app = express();
 
@@ -28,7 +30,11 @@ app.get("/", (req, res) => {
 
 
 app.get("/health", healthHandler);
+
 app.post("/v1/chat/completions", chatCompletionsHandler);
+
+// Claude v1/messages endpoint
+app.use("/v1", claudeCompletionsRouter);
 
 // User API Key management endpoints
 app.use("/v1/user-api-keys", userApiKeysRouter);
