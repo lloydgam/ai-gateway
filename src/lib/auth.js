@@ -20,10 +20,18 @@ export async function requireApiKey(req) {
     plaintext = req.headers["x-api-key"].toString().trim();
     console.log('DEBUG: x-api-key header found', plaintext); //this is coming from claudecode when you use own api key to use claudecode
     // Try to find by claudecodeUserKey
-    const userByMapper = await prisma.userApiKey.findUnique({ where: { claudecodeUserKey: plaintext } });    
-    // Use aigatewayUserKey as the plaintext for hashing and downstream
-    plaintext = userByMapper.aigatewayUserKey;
-    console.log('DEBUG: new plaintext from userApiKey', plaintext);
+    try {
+      const userByMapper = await prisma.userApiKey.findUnique({ where: { claudecodeUserKey: plaintext } });
+      if (userByMapper && userByMapper.aigatewayUserKey) {
+        // Use aigatewayUserKey as the plaintext for hashing and downstream
+        plaintext = userByMapper.aigatewayUserKey;
+      } else {
+        console.error('ERROR: claudecodeUserKey not mapped or user not found:', plaintext);
+        return { ok: false, status: 403, error: "Invalid or unmapped ClaudeCode API key: " + plaintext + " Please report this error message to rocks support together with your email information"};
+      }
+    } catch (err) {
+      return { ok: false, status: 500, error: "Server error during ClaudeCode API key lookup" };
+    }
   }
   if (!plaintext) {
     return { ok: false, status: 401, error: "Missing Bearer token or x-api-key" };
