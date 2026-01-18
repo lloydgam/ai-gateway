@@ -11,6 +11,9 @@ export function hashKey(plaintext) {
 
 export async function requireApiKey(req) {
   let plaintext;
+
+  console.log('DEBUG: requireApiKey called with headers:', req.headers);
+
   const auth = req.headers["authorization"] || "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
   
@@ -20,17 +23,19 @@ export async function requireApiKey(req) {
     plaintext = req.headers["x-api-key"].toString().trim();
     console.log('DEBUG: x-api-key header found', plaintext); //this is coming from claudecode when you use own api key to use claudecode
     // Try to find by claudecodeUserKey
-    try {
-      const userByMapper = await prisma.userApiKey.findUnique({ where: { claudecodeUserKey: plaintext } });
-      if (userByMapper && userByMapper.aigatewayUserKey) {
-        // Use aigatewayUserKey as the plaintext for hashing and downstream
-        plaintext = userByMapper.aigatewayUserKey;
-      } else {
-        console.error('ERROR: claudecodeUserKey not mapped or user not found:', plaintext);
-        return { ok: false, status: 403, error: "Invalid or unmapped ClaudeCode API key: " + plaintext + " Please report this error message to rocks support together with your email information"};
+    if (plaintext.startsWith("sk-ant-api")) {
+      try {
+        const userByMapper = await prisma.userApiKey.findUnique({ where: { claudecodeUserKey: plaintext } });
+        if (userByMapper && userByMapper.aigatewayUserKey) {
+          // Use aigatewayUserKey as the plaintext for hashing and downstream
+          plaintext = userByMapper.aigatewayUserKey;
+        } else {
+          console.error('ERROR: claudecodeUserKey not mapped or user not found:', plaintext);
+          return { ok: false, status: 403, error: "Invalid or unmapped ClaudeCode API key: " + plaintext + " Please report this error message to rocks support together with your email information"};
+        }
+      } catch (err) {
+        return { ok: false, status: 500, error: "Server error during ClaudeCode API key lookup" };
       }
-    } catch (err) {
-      return { ok: false, status: 500, error: "Server error during ClaudeCode API key lookup" };
     }
   }
   if (!plaintext) {

@@ -39,6 +39,9 @@ app.use("/v1", claudeCompletionsRouter);
 // User API Key management endpoints
 app.use("/v1/user-api-keys", userApiKeysRouter);
 
+// Opencode Support
+app.use("/", claudeCompletionsRouter); // This will handle /messages
+
 const port = parseInt(process.env.PORT || "8000", 10);
 app.listen(port, () => {
   console.log(`AI Gateway listening on :${port}`);

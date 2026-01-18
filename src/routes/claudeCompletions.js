@@ -33,7 +33,7 @@ function normalizeContent(out) {
  * Claude v1/messages compatible endpoint
  */
 router.post("/messages", async (req, res) => {
-  console.log('DEBUG: Received /responses/messages request with body:', req.body);
+  // console.log('DEBUG: Received /responses/messages request with body:', req.body);
   try {
     // --- Auth ---
     const auth = await requireApiKey(req);
