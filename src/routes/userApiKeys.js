@@ -147,14 +147,20 @@ router.post('/:id/regenerate', async (req, res) => {
   }
 });
 
-// (Optional) List all user API keys
+// (Optional) List all user API keys with pagination
 router.get('/', async (req, res) => {
   const auth = await requireApiKey(req);
   if (!auth.ok) {
     return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
   }
-  const keys = await prisma.userApiKey.findMany();
-   // Return all fields except apiKeyHash, and add a masked apiKey field
+  let { page = 1, pageSize = 50 } = req.query;
+  page = Math.max(1, parseInt(page));
+  pageSize = Math.min(100, Math.max(1, parseInt(pageSize)));
+  const skip = (page - 1) * pageSize;
+  const [total, keys] = await Promise.all([
+    prisma.userApiKey.count(),
+    prisma.userApiKey.findMany({ skip, take: pageSize })
+  ]);
   const result = keys.map(user => ({
     id: user.id,
     isActive: user.isActive,
@@ -167,18 +173,28 @@ router.get('/', async (req, res) => {
     updatedAt: user.updatedAt,
     limitToken: user.limitToken,
   }));
-  res.json(result);
+  res.json({
+    total,
+    page,
+    pageSize,
+    data: result
+  });
 });
 
-// List all user API keys with usage and limits
+// List all user API keys with usage and limits, paginated
 router.get('/usage', async (req, res) => {
   const auth = await requireApiKey(req);
   if (!auth.ok) {
     return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
   }
-  // Get all users
-  const users = await prisma.userApiKey.findMany();
-  // For each user, aggregate request count and total cost from UserRequest and Request
+  let { page = 1, pageSize = 50 } = req.query;
+  page = Math.max(1, parseInt(page));
+  pageSize = Math.min(100, Math.max(1, parseInt(pageSize)));
+  const skip = (page - 1) * pageSize;
+  const [total, users] = await Promise.all([
+    prisma.userApiKey.count(),
+    prisma.userApiKey.findMany({ skip, take: pageSize })
+  ]);
   const result = await Promise.all(users.map(async user => {
     // Aggregate from UserRequest (per-user custom events)
     const userAgg = await prisma.userRequest.aggregate({
@@ -200,32 +216,49 @@ router.get('/usage', async (req, res) => {
       lastname: user.lastname,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      // Sum tokens and cost from Request table
       totalTokens: reqAgg._sum.totalTokens || 0,
       requestCount: reqAgg._count.id,
       totalCostUsd: reqAgg._sum.costUsd || 0,
-      // Optionally, you can also include userAgg if you want to show custom events
       limitUsd: user.limitUsd,
       limitToken: user.limitToken,
       overLimit: reqAgg._sum.costUsd && user.limitUsd && reqAgg._sum.costUsd > user.limitUsd ? true : false
     };
   }));
-  res.json(result);
+  res.json({
+    total,
+    page,
+    pageSize,
+    data: result
+  });
 });
 
-// Get usage history for a specific user
+// Get usage history for a specific user, paginated
 router.get('/:id/usage-history', async (req, res) => {
   const auth = await requireApiKey(req);
   if (!auth.ok) {
     return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
   }
   const { id } = req.params;
-  // Fetch real usage history from UserRequest table
-  const history = await prisma.userRequest.findMany({
-    where: { userApiKeyId: id },
-    orderBy: { createdAt: 'desc' },
+  let { page = 1, pageSize = 50 } = req.query;
+  page = Math.max(1, parseInt(page));
+  pageSize = Math.min(100, Math.max(1, parseInt(pageSize)));
+  const skip = (page - 1) * pageSize;
+  const [total, history] = await Promise.all([
+    prisma.userRequest.count({ where: { userApiKeyId: id } }),
+    prisma.userRequest.findMany({
+      where: { userApiKeyId: id },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: pageSize
+    })
+  ]);
+  res.json({
+    userId: id,
+    total,
+    page,
+    pageSize,
+    data: history
   });
-  res.json({ userId: id, history });
 });
 
 // Increase token limit for a user API key
@@ -293,17 +326,20 @@ router.post('/:id/update-claudecode-key', async (req, res) => {
   }
 });
 
-// Usage report endpoint: filter by month/year range and optional providerModel
+// Usage report endpoint: filter by month/year range and optional providerModel, paginated for users
 router.get('/reports-usage', async (req, res) => {
   const auth = await requireApiKey(req);
   if (!auth.ok) {
     return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
   }
 
-  const { startMonth, startYear, endMonth, endYear, providerModel, email, global } = req.query;
+  let { startMonth, startYear, endMonth, endYear, providerModel, email, global, page = 1, pageSize = 50 } = req.query;
   if (!startMonth || !startYear || !endMonth || !endYear) {
     return res.status(400).json({ error: 'Missing required date range parameters' });
   }
+  page = Math.max(1, parseInt(page));
+  pageSize = Math.min(100, Math.max(1, parseInt(pageSize)));
+  const skip = (page - 1) * pageSize;
   const startM = Number(startMonth);
   const startY = Number(startYear);
   const endM = Number(endMonth);
@@ -366,9 +402,12 @@ router.get('/reports-usage', async (req, res) => {
     }));
     return res.json({ months: monthsData });
   } else {
-    // Get all users, optionally filter by email
+    // Get all users, optionally filter by email, paginated
     const userWhere = email ? { where: { email } } : {};
-    const users = await prisma.userApiKey.findMany(userWhere);
+    const [total, users] = await Promise.all([
+      prisma.userApiKey.count(userWhere),
+      prisma.userApiKey.findMany({ ...userWhere, skip, take: pageSize })
+    ]);
     // For each user, aggregate usage from Request table by month
     const result = await Promise.all(users.map(async user => {
       const monthsData = await Promise.all(monthsRange.map(async ({ month, year }) => {
@@ -405,7 +444,12 @@ router.get('/reports-usage', async (req, res) => {
         months: monthsData
       };
     }));
-    res.json(result);
+    res.json({
+      total,
+      page,
+      pageSize,
+      data: result
+    });
   }
 });
 export default router;
