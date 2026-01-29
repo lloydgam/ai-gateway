@@ -87,9 +87,9 @@ router.delete('/:id', async (req, res) => {
 // Update firstname and lastname for a user by id
 router.put('/:id', async (req, res) => {
   const auth = await requireApiKey(req);
-  // if (!auth.ok) {
-  //   return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
-  // }
+  if (!auth.ok) {
+    return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
+  }
   const { id } = req.params;
   const { firstname, lastname } = req.body;
   if (!firstname || !lastname) {
@@ -296,9 +296,9 @@ router.post('/:id/update-claudecode-key', async (req, res) => {
 // Usage report endpoint: filter by month/year range and optional providerModel
 router.get('/reports-usage', async (req, res) => {
   const auth = await requireApiKey(req);
-  // if (!auth.ok) {
-  //   return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
-  // }
+  if (!auth.ok) {
+    return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
+  }
 
   const { startMonth, startYear, endMonth, endYear, providerModel, email, global } = req.query;
   if (!startMonth || !startYear || !endMonth || !endYear) {
