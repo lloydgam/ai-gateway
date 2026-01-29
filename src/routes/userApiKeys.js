@@ -22,14 +22,14 @@ router.post('/', async (req, res) => {
   }
   const { email, firstname, lastname, limitToken, claudecodeUserKey, aigatewayUserKey } = req.body;
 
-  if (!email || !firstname || !lastname || !limitToken || !claudecodeUserKey || !aigatewayUserKey) {
+  if (!email || !firstname || !lastname || !limitToken) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   const apiKey = generateApiKey();
   const apiKeyHash = hashKey(apiKey);
   try {
     const userApiKey = await prisma.userApiKey.create({
-      data: { email, firstname, lastname, apiKeyHash, limitToken, claudecodeUserKey, aigatewayUserKey: apiKey  },
+      data: { email, firstname, lastname, apiKeyHash, limitToken, claudecodeUserKey: apiKeyHash, aigatewayUserKey: apiKey  },
     });
     // Log creation in UserRequest
     await prisma.userRequest.create({
@@ -81,6 +81,28 @@ router.delete('/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(404).json({ error: 'API key not found' });
+  }
+});
+
+// Update firstname and lastname for a user by id
+router.put('/:id', async (req, res) => {
+  const auth = await requireApiKey(req);
+  // if (!auth.ok) {
+  //   return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
+  // }
+  const { id } = req.params;
+  const { firstname, lastname } = req.body;
+  if (!firstname || !lastname) {
+    return res.status(400).json({ error: 'Missing firstname or lastname' });
+  }
+  try {
+    const updated = await prisma.userApiKey.update({
+      where: { id },
+      data: { firstname, lastname }
+    });
+    res.json({ id: updated.id, firstname: updated.firstname, lastname: updated.lastname });
+  } catch (err) {
+    res.status(404).json({ error: 'User API key not found' + err.message  });
   }
 });
 
@@ -268,6 +290,122 @@ router.post('/:id/update-claudecode-key', async (req, res) => {
     res.json({ id: updated.id, claudecodeUserKey: updated.claudecodeUserKey });
   } catch (err) {
     res.status(404).json({ error: 'User API key not found' });
+  }
+});
+
+// Usage report endpoint: filter by month/year range and optional providerModel
+router.get('/reports-usage', async (req, res) => {
+  const auth = await requireApiKey(req);
+  // if (!auth.ok) {
+  //   return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
+  // }
+
+  const { startMonth, startYear, endMonth, endYear, providerModel, email, global } = req.query;
+  if (!startMonth || !startYear || !endMonth || !endYear) {
+    return res.status(400).json({ error: 'Missing required date range parameters' });
+  }
+  const startM = Number(startMonth);
+  const startY = Number(startYear);
+  const endM = Number(endMonth);
+  const endY = Number(endYear);
+  // Helper to get all months in range
+  function getMonthYearRange(startM, startY, endM, endY) {
+    const months = [];
+    let y = startY, m = startM;
+    while (y < endY || (y === endY && m <= endM)) {
+      months.push({ month: m, year: y });
+      m++;
+      if (m > 12) { m = 1; y++; }
+    }
+    return months;
+  }
+  const monthsRange = getMonthYearRange(startM, startY, endM, endY);
+  if (global === 'true') {
+    // Aggregate for all users as a whole
+    const monthsData = await Promise.all(monthsRange.map(async ({ month, year }) => {
+      const monthStart = new Date(year, month - 1, 1);
+      const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+      const where = {
+        createdAt: {
+          gte: monthStart,
+          lte: monthEnd
+        }
+      };
+      if (providerModel) {
+        where.providerModel = providerModel;
+      }
+      if (email) {
+        // Find user(s) with this email
+        const users = await prisma.userApiKey.findMany({ where: { email } });
+        const userIds = users.map(u => u.id);
+        if (userIds.length > 0) {
+          where.apiKeyId = { in: userIds };
+        } else {
+          // No users with this email, so skip
+          return {
+            month,
+            year,
+            totalPromptTokens: 0,
+            totalCompletionTokens: 0,
+            totalRequestCount: 0
+          };
+        }
+      }
+      const agg = await prisma.request.aggregate({
+        _sum: { promptTokens: true, completionTokens: true },
+        _count: { id: true },
+        where
+      });
+      return {
+        month,
+        year,
+        totalPromptTokens: agg._sum.promptTokens || 0,
+        totalCompletionTokens: agg._sum.completionTokens || 0,
+        totalRequestCount: agg._count.id || 0
+      };
+    }));
+    return res.json({ months: monthsData });
+  } else {
+    // Get all users, optionally filter by email
+    const userWhere = email ? { where: { email } } : {};
+    const users = await prisma.userApiKey.findMany(userWhere);
+    // For each user, aggregate usage from Request table by month
+    const result = await Promise.all(users.map(async user => {
+      const monthsData = await Promise.all(monthsRange.map(async ({ month, year }) => {
+        const monthStart = new Date(year, month - 1, 1);
+        const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+        const where = {
+          apiKeyId: user.id,
+          createdAt: {
+            gte: monthStart,
+            lte: monthEnd
+          }
+        };
+        if (providerModel) {
+          where.providerModel = providerModel;
+        }
+        const agg = await prisma.request.aggregate({
+          _sum: { promptTokens: true, completionTokens: true },
+          _count: { id: true },
+          where
+        });
+        return {
+          month,
+          year,
+          totalPromptTokens: agg._sum.promptTokens || 0,
+          totalCompletionTokens: agg._sum.completionTokens || 0,
+          totalRequestCount: agg._count.id || 0
+        };
+      }));
+      return {
+        id: user.id,
+        email: user.email,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        months: monthsData
+      };
+    }));
+    res.json(result);
   }
 });
 export default router;

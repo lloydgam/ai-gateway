@@ -1,0 +1,9 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://ai-gateway.fullscale.rocks",
+    "ANTHROPIC_API_KEY": "4f7c67cc1483acbed46418aeedb70c99d35cd1621ce190499ca1d8899d33e8c7",
+    "ANTHROPIC_MODEL": "claude-fast"
+  },
+  "hasCompletedOnboarding": true,
+  "preferredAuthMethod": "console"
+}

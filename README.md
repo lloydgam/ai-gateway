@@ -67,11 +67,11 @@ This gateway supports integration with ClaudeCode, which requires a mapping betw
 
 
 
+
 ### Endpoints
 
-
 - `POST /v1/user-api-keys` — Create a new user API key
-  - Body: `{ "email": "...", "firstname": "...", "lastname": "...", "claudecodeUserKey": "<claudecode_api_key>" }`
+  - Body: `{ "email": "...", "firstname": "...", "lastname": "...", "limitToken": <number> }`
   - Response: `{ id, email, firstname, lastname, apiKey, claudecodeUserKey, aigatewayUserKey, createdAt, updatedAt }` (apiKey and both mapping keys are plaintext, shown only once)
 
 - `DELETE /v1/user-api-keys/:id` — Delete a user API key
@@ -85,6 +85,14 @@ This gateway supports integration with ClaudeCode, which requires a mapping betw
   - Body: `{ "increment": <number> }`
   - Response: `{ id, newLimit }`
 
+- `PUT /v1/user-api-keys/:id` — Update the firstname and lastname for a user
+  - Body: `{ "firstname": "NewFirst", "lastname": "NewLast" }`
+  - Response: `{ id, firstname, lastname }`
+
+- `POST /v1/user-api-keys/:id/update-claudecode-key` — Update the ClaudeCode API key for a user
+  - Body: `{ "claudecodeUserKey": "<new_claudecode_api_key>" }`
+  - Response: `{ id, claudecodeUserKey }`
+
 - `GET /v1/user-api-keys` — List all user API keys (for admin/debug; does not return plaintext keys)
 
 - `GET /v1/user-api-keys/usage` — List all user API keys with usage and limits
@@ -93,10 +101,14 @@ This gateway supports integration with ClaudeCode, which requires a mapping betw
 - `GET /v1/user-api-keys/:id/usage-history` — Get usage history for a specific user
   - Response: `{ userId, history: [ ... ] }`
 
-- `POST /v1/user-api-keys/:id/update-claudecode-key` — Update the ClaudeCode API key for a user
-  - Body: `{ "claudecodeUserKey": "<new_claudecode_api_key>" }`
-  - Response: `{ id, claudecodeUserKey }`
-  
+- `GET /v1/user-api-keys/reports-usage` — Get per-user usage report grouped by month
+  - Query params: `startMonth`, `startYear`, `endMonth`, `endYear`, optional `providerModel`, `email`
+  - Response: `[{ id, email, firstname, lastname, months: [{ month, year, totalPromptTokens, totalCompletionTokens, totalRequestCount }] }]`
+
+- `GET /v1/user-api-keys/reports-usage?global=true` — Get global (all users combined) usage report grouped by month
+  - Query params: `startMonth`, `startYear`, `endMonth`, `endYear`, optional `providerModel`, `email`
+  - Response: `{ months: [{ month, year, totalPromptTokens, totalCompletionTokens, totalRequestCount }] }`
+
 **Security Note:**
 - The plaintext API key is only returned once. Store it securely after creation/regeneration.
 - User API keys are hashed before storage and cannot be recovered if lost.
@@ -186,6 +198,46 @@ Recommended:
 docker compose up -d --build
 ```
 
+## Database Migration Guide (Prisma)
+
+If you need to update your database schema (for example, to add new fields or tables), you can use Prisma Migrate to safely apply changes without losing existing data.
+
+### 1. Edit your schema
+
+Edit `prisma/schema.prisma` to reflect your desired changes (e.g., add new fields, models, or relations).
+
+### 2. Create a new migration
+
+Run the following command to create a new migration based on your schema changes:
+
+```bash
+npx prisma migrate dev --name <migration-name>
+```
+
+Replace `<migration-name>` with a descriptive name for your migration (e.g., `add-usage-reports`).
+
+This command will:
+- Generate a new migration file in `prisma/migrations/`
+- Apply the migration to your local database
+- Update the Prisma client
+
+### 3. Apply migrations in production (without losing data)
+
+When deploying to production or another environment, run:
+
+```bash
+npx prisma migrate deploy
+```
+
+This will apply all pending migrations to your production database, preserving existing data.
+
+### 4. Verify your changes
+
+Check your database and application to ensure the new schema is working as expected and no data was lost.
+
+### Notes
+- **Never use `prisma migrate reset` in production** — it will wipe your data!
+- Always back up your production database before applying migrations.
 
 ## 4) What’s included (MVP)
 - OpenAI-compatible `chat/completions` (streaming and non-streaming)
