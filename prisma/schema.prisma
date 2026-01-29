@@ -59,6 +59,11 @@ model Request {
   completionTokens Int      @default(0)
   totalTokens      Int      @default(0)
 
+  // Store the user's prompt (large text)
+  userPrompt       String?  @db.Text
+  // Store the LLM's response (large text)
+  llmResponse      String?  @db.Text
+
   // best-effort cost estimate
   costUsd          Decimal  @default(0)
 

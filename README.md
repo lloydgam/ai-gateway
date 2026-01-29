@@ -223,21 +223,14 @@ This command will:
 
 ### 3. Apply migrations in production (without losing data)
 
-When deploying to production or another environment, run:
+IMPORTANT: Change prisma schema as needed
+run on container # npx prisma db push
 
-```bash
-npx prisma migrate deploy
-```
-
-This will apply all pending migrations to your production database, preserving existing data.
+This will apply and sync to db schema.
 
 ### 4. Verify your changes
 
 Check your database and application to ensure the new schema is working as expected and no data was lost.
-
-### Notes
-- **Never use `prisma migrate reset` in production** — it will wipe your data!
-- Always back up your production database before applying migrations.
 
 ## 4) What’s included (MVP)
 - OpenAI-compatible `chat/completions` (streaming and non-streaming)

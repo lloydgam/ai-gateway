@@ -81,6 +81,8 @@ router.post("/messages", async (req, res) => {
         completionTokens,
         totalTokens: out?.usage?.total_tokens ?? promptTokens + completionTokens,
         costUsd: estimateCostUsd(out?.providerModel, promptTokens, completionTokens),
+        userPrompt: JSON.stringify(messages),
+        llmResponse: out?.text || null
       };
 
       logRequest(logPayload).catch(() => {});
@@ -190,6 +192,19 @@ router.post("/messages", async (req, res) => {
     });
 
     const { promptTokens, completionTokens } = logUsage(out);
+    // Log userPrompt and llmResponse for non-stream path
+    logRequest({
+      apiKeyId: apiKey.id,
+      requestedModel: model,
+      provider: out?.provider,
+      providerModel: out?.providerModel,
+      promptTokens,
+      completionTokens,
+      totalTokens: out?.usage?.total_tokens ?? promptTokens + completionTokens,
+      costUsd: estimateCostUsd(out?.providerModel, promptTokens, completionTokens),
+      userPrompt: JSON.stringify(messages),
+      llmResponse: normalizeText(out)
+    }).catch(() => {});
 
     const response = {
       id: out?.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,

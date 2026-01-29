@@ -17,6 +17,8 @@ const app = express();
 
 // Open up CORS for all origins
 app.use(corsMiddleware);
+// Explicitly handle OPTIONS for all routes to ensure CORS preflight success
+app.options('*', corsMiddleware);
 app.use(helmet());
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("combined"));

@@ -135,7 +135,9 @@ export async function chatCompletionsHandler(req, res) {
         promptTokens,
         completionTokens,
         totalTokens,
-        costUsd: estimateCostUsd(out.providerModel, promptTokens, completionTokens) 
+        costUsd: estimateCostUsd(out.providerModel, promptTokens, completionTokens),
+        userPrompt: JSON.stringify(sanitizedMessages),
+        llmResponse: out.text || null
       };
       console.log('DEBUG: logRequest payload (stream):', logPayload);
       logRequest(logPayload)
@@ -258,7 +260,9 @@ export async function chatCompletionsHandler(req, res) {
       promptTokens,
       completionTokens,
       totalTokens,
-      costUsd
+      costUsd,
+      userPrompt: JSON.stringify(sanitizedMessages),
+      llmResponse: out.text || null
     }).catch(() => {});
 
     // If this is a user API key, log to UserRequest as well

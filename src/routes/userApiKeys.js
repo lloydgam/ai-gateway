@@ -452,4 +452,73 @@ router.get('/reports-usage', async (req, res) => {
     });
   }
 });
+
+// Fetch userPrompt and llmResponse by user email or apiKeyId, filter by last N days (default 1)
+// Fetch userPrompt and llmResponse by user email or apiKeyId, or show all latest if neither is provided
+router.get('/prompts-responses', async (req, res) => {
+  const auth = await requireApiKey(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
+  }
+  const { email, apiKeyId, days, limit } = req.query;
+  let requests = [];
+  if (email || apiKeyId) {
+    const numDays = Math.max(1, parseInt(days) || 30); // default is the last 30 days
+    const since = new Date();
+    since.setDate(since.getDate() - numDays); // include today if days=1
+    let keyId = apiKeyId;
+    if (!keyId && email) {
+      // Find userApiKey by email
+      const user = await prisma.userApiKey.findUnique({ where: { email } });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      keyId = user.id;
+    }
+    // Find all requests for this user/apiKeyId in the last N days
+    requests = await prisma.request.findMany({
+      where: {
+        apiKeyId: keyId,
+        createdAt: { gte: since },
+        NOT: [
+          { userPrompt: null },
+          { llmResponse: null }
+        ]
+      },
+      select: {
+        id: true,
+        apiKeyId: true,
+        createdAt: true,
+        userPrompt: true,
+        llmResponse: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    console.log(`Fetched ${requests.length} requests for apiKeyId ${keyId} in last ${numDays} days`);
+    return res.json({ apiKeyId: keyId, email: email, days: numDays, results: requests });
+  } else {
+    // No filter: show latest N prompts/responses
+    const maxLimit = 500;
+    const n = Math.min(parseInt(limit) || 100, maxLimit);
+    requests = await prisma.request.findMany({
+      where: {
+        NOT: [
+          { userPrompt: null },
+          { llmResponse: null }
+        ]
+      },
+      select: {
+        id: true,
+        apiKeyId: true,
+        createdAt: true,
+        userPrompt: true,
+        llmResponse: true
+      },
+      orderBy: { createdAt: 'desc' },
+      take: n
+    });
+    return res.json({ results: requests, limit: n });
+  }
+});
+
 export default router;

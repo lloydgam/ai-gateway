@@ -8,7 +8,9 @@ export async function logRequest({
   promptTokens,
   completionTokens,
   totalTokens,
-  costUsd
+  costUsd,
+  userPrompt,
+  llmResponse
 }) {
   return prisma.request.create({
     data: {
@@ -19,7 +21,9 @@ export async function logRequest({
       promptTokens,
       completionTokens,
       totalTokens,
-      costUsd
+      costUsd,
+      userPrompt,
+      llmResponse
     }
   });
 }
