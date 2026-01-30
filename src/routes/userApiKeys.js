@@ -148,18 +148,27 @@ router.post('/:id/regenerate', async (req, res) => {
 });
 
 // (Optional) List all user API keys with pagination
+// List all user API keys with pagination and optional filtering by lastname or email
 router.get('/', async (req, res) => {
   const auth = await requireApiKey(req);
   if (!auth.ok) {
     return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
   }
-  let { page = 1, pageSize = 50 } = req.query;
+  let { page = 1, pageSize = 50, lastname, email } = req.query;
   page = Math.max(1, parseInt(page));
   pageSize = Math.min(100, Math.max(1, parseInt(pageSize)));
   const skip = (page - 1) * pageSize;
+  // Build filter
+  const where = {};
+  if (lastname) {
+    where.lastname = { contains: lastname, mode: 'insensitive' };
+  }
+  if (email) {
+    where.email = { contains: email, mode: 'insensitive' };
+  }
   const [total, keys] = await Promise.all([
-    prisma.userApiKey.count(),
-    prisma.userApiKey.findMany({ skip, take: pageSize })
+    prisma.userApiKey.count({ where }),
+    prisma.userApiKey.findMany({ where, skip, take: pageSize })
   ]);
   const result = keys.map(user => ({
     id: user.id,
@@ -519,6 +528,63 @@ router.get('/prompts-responses', async (req, res) => {
     });
     return res.json({ results: requests, limit: n });
   }
+});
+
+// Fetch prompts/responses grouped by email, with optional filtering
+router.get('/grouped-prompts-responses', async (req, res) => {
+  const auth = await requireApiKey(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ error: { message: auth.error, type: "auth_error" } });
+  }
+  const { email, days } = req.query;
+  let where = {
+    NOT: [
+      { userPrompt: null },
+      { llmResponse: null }
+    ]
+  };
+  if (email) {
+    where.apiKeyId = {
+      in: (await prisma.userApiKey.findMany({ where: { email: { contains: email, mode: 'insensitive' } }, select: { id: true } })).map(u => u.id)
+    };
+  }
+  let numDays = 30;
+  if (days !== undefined) {
+    numDays = Math.max(1, parseInt(days));
+    if (numDays > 90) {
+      return res.status(400).json({ error: 'The maximum allowed value for days is 90.' });
+    }
+  }
+  const since = new Date();
+  since.setDate(since.getDate() - numDays + 1);
+  where.createdAt = { gte: since };
+  // Fetch all matching requests
+  const requests = await prisma.request.findMany({
+    where,
+    select: {
+      id: true,
+      apiKeyId: true,
+      createdAt: true,
+      userPrompt: true,
+      llmResponse: true
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+  // Fetch all userApiKeys for mapping
+  const userMap = {};
+  const userIds = [...new Set(requests.map(r => r.apiKeyId))];
+  if (userIds.length > 0) {
+    const users = await prisma.userApiKey.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } });
+    users.forEach(u => { userMap[u.id] = u.email; });
+  }
+  // Group by email
+  const grouped = {};
+  for (const req of requests) {
+    const userEmail = userMap[req.apiKeyId] || 'unknown';
+    if (!grouped[userEmail]) grouped[userEmail] = [];
+    grouped[userEmail].push({ prompt: req.userPrompt, response: req.llmResponse, createdAt: req.createdAt });
+  }
+  res.json(grouped);
 });
 
 export default router;

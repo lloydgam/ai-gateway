@@ -94,6 +94,11 @@ This gateway supports integration with ClaudeCode, which requires a mapping betw
   - Response: `{ id, claudecodeUserKey }`
 
 - `GET /v1/user-api-keys` — List all user API keys (for admin/debug; does not return plaintext keys)
+  - Query params:
+    - `lastname` (optional): filter by lastname (case-insensitive, partial match)
+    - `email` (optional): filter by email (case-insensitive, partial match)
+    - `page`, `pageSize` (optional): pagination controls
+  - Response: `{ total, page, pageSize, data: [ ... ] }`
 
 - `GET /v1/user-api-keys/usage` — List all user API keys with usage and limits
   - Response: `[ { id, email, firstname, lastname, createdAt, updatedAt, totalTokens, requestCount, totalCostUsd, limitUsd, overLimit } ]`
@@ -108,6 +113,13 @@ This gateway supports integration with ClaudeCode, which requires a mapping betw
 - `GET /v1/user-api-keys/reports-usage?global=true` — Get global (all users combined) usage report grouped by month
   - Query params: `startMonth`, `startYear`, `endMonth`, `endYear`, optional `providerModel`, `email`
   - Response: `{ months: [{ month, year, totalPromptTokens, totalCompletionTokens, totalRequestCount }] }`
+
+- `GET /v1/user-api-keys/grouped-prompts-responses` — Fetch prompts and responses grouped by email
+  - Query params:
+    - `email` (optional): filter by email (case-insensitive, partial match)
+    - `days` (optional): filter by last N days (default: all)
+  - Response: `{ "user1@email.com": [ { prompt, response, createdAt }, ... ], ... }`
+  - If no filter is provided, returns all prompts/responses grouped by email.
 
 **Security Note:**
 - The plaintext API key is only returned once. Store it securely after creation/regeneration.
